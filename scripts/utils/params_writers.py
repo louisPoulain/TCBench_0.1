@@ -178,7 +178,8 @@ def write_one_year(output_path:str, season:int=2000, step:int=6, max_lead:int=16
 
 ## FOR MONIKA'S PROJECT
 
-def write_params_for_period(output_path, start_date:str="20200301", start_time="0000", end_date:str="20200831", end_time="0000", max_lead:int=168, step:int=12, **kwargs):
+def write_params_for_period(output_path, start_date:str="20200301", start_time="0000", end_date:str="20200831", 
+                            end_time="0000", max_lead:int=168, step:int=12, **kwargs):
     # step: start a new forecast every <step> hours
     # complementary to write_input_params_to_file but this function does not take care if th date/time is in IBTrACS (more general)
     
