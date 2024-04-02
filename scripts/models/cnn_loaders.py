@@ -9,6 +9,16 @@ from utils.main_utils import get_lead_time, get_start_date_nc, get_tc_id_nc
 from multiprocessing import Pool
 
 
+DELTAS_PER_SEASON = {'p_True': {'2000': 39082, '2001': 33078, '2002': 39724, '2003': 52532, '2004': 56814, '2005': 49610, '2006': 46047, '2007': 34028},
+                     'p_False': {'2000': 46620, '2001': 36623, '2002': 41296, '2003': 53617, '2004': 58405, '2005': 50519, '2006': 46605, '2007': 34343}}
+
+Q1_WIND = 1.3 # m/s, estimated from 2005 in north Atlantic
+MAX_WIND = 30 # m/s, estimated from 2005 in north Atlantic
+MIN_PRES = 95000 # Pa, estimated from 2005 in north Atlantic
+Q3_PRES = 102000 # Pa, estimated from 2005 in north Atlantic
+linear = lambda orig, target, point: (target[1]-target[0])*point/(orig[1]-orig[0]) + (target[0]*orig[1] - orig[0]*target[1])/(orig[1]-orig[0])
+
+
 def get_ibtracs_data(df, seasons=[], pres=True):
     
     if not isinstance(seasons, list):
@@ -23,7 +33,7 @@ def get_ibtracs_data(df, seasons=[], pres=True):
     pres_cols = [col for col in df.columns if "_PRES" in col and "PRES_" not in col and col!="WMO_PRES"]
     pres_columns = {}
     for tc_id in tc_ids:
-        tmp_df = df[df["SID"]==tc_id].loc[1:] # we never predict the start of the TC
+        tmp_df = df[df["SID"]==tc_id].iloc[1:] # we never predict the start of the TC
         idxs = [idx for idx in tmp_df.index if tmp_df.loc[idx, wind_col]!=" "]
         
         if pres:
@@ -41,18 +51,24 @@ def get_ibtracs_data(df, seasons=[], pres=True):
 class CNN4PP_Dataset(Dataset):
     
     def __init__(self, data_path, model_name, ibtracs_path, seasons, pres=True, 
-                 save_path="/users/lpoulain/louis/plots/cnn/", train_seasons=[], verif_input=False):
+                 save_path="/users/lpoulain/louis/plots/cnn/", train_seasons=[], create_input=True, verif_input=False, noprint=False):
+        
+        
         
         if isinstance(seasons, str):
             seasons = [int(seasons)]
         if isinstance(seasons, int):
             seasons = [seasons]
+        self.noprint = noprint
         self.pres = pres
         self.save_path = save_path
         self.seasons = seasons
         self.model_name = "pangu" if model_name in ["pangu", "panguweather"] else model_name
         self.data_folder = "panguweather" if model_name=="pangu" else model_name
         self.train_seasons = train_seasons
+        self.delta_lat_mean, self.delta_lon_mean = 0, 0
+        self.delta_lat_std, self.delta_lon_std = 0, 0
+        delta_lon_mean_sq, delta_lat_mean_sq = 0, 0
 
         ibtracs_df = pd.read_csv(ibtracs_path, na_filter=False, dtype="string")
         self.ibtracs_df, self.valid_dates, self.pres_columns = get_ibtracs_data(ibtracs_df, seasons, pres=pres)
@@ -61,6 +77,7 @@ class CNN4PP_Dataset(Dataset):
         self.data_list = []
         self.data_list_scratch = []
         self.ll = [0] * len(self.seasons)
+        deltas_counter = 0
         
         for i, season in enumerate(seasons):
             if not os.path.isfile(os.path.join(save_path, f"Data/{self.data_folder}/netcdf/Data_list_{season}_p_{self.pres}.pkl")):
@@ -92,15 +109,22 @@ class CNN4PP_Dataset(Dataset):
             with open(os.path.join(save_path, f"Data/{self.data_folder}/scratch/Data_list_{season}_p_{self.pres}.pkl"), "rb") as f:
                 self.data_list_scratch.append(pickle.load(f))
             
-        
-        #self.data_list = self.data_list[:100]
-        #self.data_list_scratch = self.data_list_scratch[:100]
-        #for i in range(len(self.data_list)):
-        #    self.data_list[i] = (*self.data_list[i], self.ll[i])
+        for season in train_seasons:
+            self.delta_lat_mean += np.load(f"/scratch/lpoulain/{season}/lat_diff_mean_p_{self.pres}.npy") * DELTAS_PER_SEASON[f"p_{self.pres}"][season]
+            self.delta_lon_mean += np.load(f"/scratch/lpoulain/{season}/lon_diff_mean_p_{self.pres}.npy") * DELTAS_PER_SEASON[f"p_{self.pres}"][season]
+            delta_lat_mean_sq += np.load(f"/scratch/lpoulain/{season}/lat_diff_meanx2_p_{self.pres}.npy") * DELTAS_PER_SEASON[f"p_{self.pres}"][season]
+            delta_lon_mean_sq += np.load(f"/scratch/lpoulain/{season}/lon_diff_meanx2_p_{self.pres}.npy") * DELTAS_PER_SEASON[f"p_{self.pres}"][season]
+            deltas_counter += DELTAS_PER_SEASON[f"p_{self.pres}"][season]
+            
+        self.delta_lat_mean /= deltas_counter
+        self.delta_lon_mean /= deltas_counter
+        self.delta_lat_std = np.sqrt(delta_lat_mean_sq/deltas_counter - self.delta_lat_mean**2)
+        self.delta_lon_std = np.sqrt(delta_lon_mean_sq/deltas_counter - self.delta_lon_mean**2)
         
         #self.pkl2npy()
         #self.rename()
-        self.save_as_np_new()
+        if create_input:
+            self.save_as_np_new()
         self.numel = []
         
         for i, season in enumerate(self.seasons):
@@ -116,11 +140,13 @@ class CNN4PP_Dataset(Dataset):
         self.get_target_normalisation_cst()
         self.get_input_normalisation_cst()
         
+        self.target_mean = np.concatenate((self.target_mean, [self.delta_lat_mean, self.delta_lon_mean]))
+        self.target_std = np.concatenate((self.target_std, [self.delta_lat_std, self.delta_lon_std]))
+        self.wind_extent = (np.array([Q1_WIND, MAX_WIND]) - self.mean[0].mean()) / self.std[0].mean()
+        if pres:
+            self.pres_extent = (np.array([MIN_PRES, Q3_PRES]) - self.mean[1].mean()) / self.std[1].mean()
         
-        #print("Mean: ", self.mean)
-        #print("Std: ", self.std)
-        #print("Mean target: ", self.target_mean)
-        #print("Std target: ", self.target_std)
+        
         
     def __len__(self):
         return sum(self.numel)
@@ -149,11 +175,17 @@ class CNN4PP_Dataset(Dataset):
         prefixes = self.data_list_scratch[i_tot]
             
         fields = np.load(prefixes[0] + f"_{self.model_name}_{i}_p_{self.pres}.npy", mmap_mode='r')[sel_idx]
-        coords = np.load(prefixes[1] + f"_{self.model_name}_{i}_p_{self.pres}.npy", mmap_mode='r')[sel_idx] / np.array([90., 180., 168.]) # lat/lon in [-1,1], ldt in [0,1]
+        lat_lon_ldt = np.load(prefixes[1] + f"_{self.model_name}_{i}_p_{self.pres}.npy", mmap_mode='r')[sel_idx]
         truth = np.load(prefixes[2] + f"_{self.model_name}_{i}_p_{self.pres}.npy", mmap_mode='r')[sel_idx]
-                
+        
+        # Normalize coords so that values fall in about the same range as wind/pres normalised
+        coords = np.array([0., 0., 0.])
+        coords[0] = linear([-90, 90], [min(self.wind_extent[0], self.pres_extent[0]), max(self.wind_extent[1], self.pres_extent[1])], lat_lon_ldt[0])
+        coords[1] = linear([0, 359.75], [min(self.wind_extent[0], self.pres_extent[0]), max(self.wind_extent[1], self.pres_extent[1])], lat_lon_ldt[1])
+        coords[2] = linear([6., 168.], [min(self.wind_extent[0], self.pres_extent[0]), max(self.wind_extent[1], self.pres_extent[1])], lat_lon_ldt[2])
+        
         fields = (fields - np.array(self.mean)) / np.array(self.std)
-        truth = np.concatenate(((truth[:-2] - np.array(self.target_mean)) / np.array(self.target_std), truth[-2:] / np.array([90., 180.])))
+        truth = (truth - np.array(self.target_mean)) / np.array(self.target_std)
         return torch.tensor(fields), torch.tensor(coords), torch.tensor(truth)
     
     
@@ -194,6 +226,7 @@ class CNN4PP_Dataset(Dataset):
                 count = 0
                 meanX = [0, 0] if self.pres else [0]
                 meanX_sq = [0, 0] if self.pres else [0]
+                
                 for tc_id in tc_ids:
 
                     tmp_df = tmp_ibtracs[tmp_ibtracs["SID"]==tc_id]
@@ -364,7 +397,8 @@ class CNN4PP_Dataset(Dataset):
             if not os.path.isfile(f"/scratch/lpoulain/{season}/bs_{self.model_name}_p_{self.pres}.pkl"):        
                 with open(f"/scratch/lpoulain/{season}/bs_{self.model_name}_p_{self.pres}.pkl", "wb") as f:
                     pickle.dump(bs, f)
-        print("All data saved as numpy arrays.")
+        if not self.noprint:
+            print("All data saved as numpy arrays.")
                     
     
     def save_one_as_np_new(self, idx):
