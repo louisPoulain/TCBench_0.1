@@ -64,7 +64,7 @@ print(f"Number of inputs: {len(inputs)}")
 #                   2007: (0,1,1), 2008: (0,1,1), 2009: (0,[0,1,2,3,4],1), 2010: (0,0,1), 2011: (0,0,1), 2012: (0,0,1), 2013: (0,0,1), 2014: (0,0,1), 2015: (0,0,[1]), 2016: (0,0,[1])
 #                   2017: (0,0,1), 2018: (0,0,1), 2019: (0,0,1), 2020: (0,0,0), 2021: (0,0,0), 2022: (0,0,0), 2023: (0,0,0)
 k = 4
-inputs = [inputs[k]]
+#inputs = [inputs[k]]
 for i, input in enumerate(inputs):
     l = inputs_len[i] if len(inputs)>1 else inputs_len[k]
     for model in models:
