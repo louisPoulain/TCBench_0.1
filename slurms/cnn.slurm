@@ -14,7 +14,7 @@
 #SBATCH --cpus-per-task 4
 #SBATCH --gpus 1
 #SBATCH --mem 24G 
-#SBATCH --time 08:00:00 
+#SBATCH --time 24:00:00 
 #SBATCH --export NONE
 
 # clearing modules and loading python
@@ -37,9 +37,11 @@ PRES=$4
 MODEL_ARGS=$5
 OPTIM=$6
 SCHED=$7
+CRPS=$8
+RETRAIN=$9
 
 python3 -u /users/lpoulain/louis/TCBench_0.1/scripts/models/cnn_main.py --data_path="$DATA_PATH" --df_path="$DF_PATH" --save_path="$SAVE_PATH" \
-                                                                              --split_ratio="$SPLIT_RATIO" --model="$MODEL" --seasons="$SEASONS" --pres="$PRES" \
-                                                                              --model_args="$MODEL_ARGS" --optim="$OPTIM" --sched="$SCHED"
+                                                                --split_ratio="$SPLIT_RATIO" --model="$MODEL" --seasons="$SEASONS" --pres="$PRES" \
+                                                                --model_args="$MODEL_ARGS" --optim="$OPTIM" --sched="$SCHED" --crps="$CRPS" --retrain="$RETRAIN"
 
 conda deactivate
