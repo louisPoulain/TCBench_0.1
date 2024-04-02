@@ -6,6 +6,17 @@ import pandas as pd
 import pickle
 
 
+global_wind_bins = np.array([7.5,  12.5,  17.5,  22.5,  27.5,  32.5,  37.5,  42.5,  47.5,
+                             52.5,  57.5,  62.5,  67.5,  72.5,  77.5,  82.5,  87.5,  92.5,
+                             97.5, 102.5, 107.5, 112.5, 117.5, 122.5, 127.5, 132.5, 137.5,
+                             142.5, 147.5, 152.5, 157.5, 162.5, 167.5, 172.5, 177.5, 182.5,
+                             187.5]) * 0.51444444
+global_pres_bins = np.array([869.5,  874.5,  879.5,  884.5,  889.5,  894.5,  899.5,  904.5,
+                             909.5,  914.5,  919.5,  924.5,  929.5,  934.5,  939.5,  944.5,
+                             949.5,  954.5,  959.5,  964.5,  969.5,  974.5,  979.5,  984.5,
+                             989.5,  994.5,  999.5, 1004.5, 1009.5, 1014.5, 1019.5, 1024.5]) * 100
+
+
 def remove_consecutive_elements(lst: list, nb_idx:int) -> bool:
     
     if len(lst) == 0:
@@ -183,7 +194,7 @@ def flatten(arg):
 
 
 
-def max_historical_distance_within_step(step: int=6, mode="deg",
+def max_historical_distance_within_step(step: int=6, mode="deg", start=2000,
         df_path:str="/work/FAC/FGSE/IDYST/tbeucler/default/raw_data/ML_PREDICT/ERA5/TC_track_filtered_1980_00_06_12_18.csv") -> int:
     from params_writers import subtract_ibtracs_iso_times
     from cut_region import haversine
@@ -193,7 +204,7 @@ def max_historical_distance_within_step(step: int=6, mode="deg",
     dists = []
     dists_lats, dists_lons = [], []
     df = pd.read_csv(df_path, dtype="string", na_filter=False)
-    
+    df = df[df["SEASON"].astype(int)>=start]
     tc_ids = df["SID"].unique()
     
     l = len(tc_ids)
@@ -240,18 +251,18 @@ def max_historical_distance_within_step(step: int=6, mode="deg",
                 
         c += 1
         
-    with open("./max_distances.txt", "a") as f:
+    with open(f"./max_distances_{start}.txt", "a") as f:
         f.write(f"Max dist {step}h: {max_dist}km (TC {tc_id_longest}, idx {index_longest})\n")
     print(f"Max dists on a {step}h period:\n",\
         f"Overall dist: {max_dist}km (TC {tc_id_longest}, idx {index_longest}).\n",\
         f"Max lon dist: {np.max(dists_lons)}{mode}\n",\
         f"Max lat dist: {np.max(dists_lats)}{mode}")
     
-    np.save(f"./{step}h_idxs.npy", np.array(index_longest))
-    np.save(f"./{step}h_tc_ids.npy", np.array(tc_id_longest))
-    np.save(f"./{step}h_dists.npy", np.array(dists))
-    np.save(f"./{step}h_dists_lats_{mode}.npy", np.array(dists_lats))
-    np.save(f"./{step}h_dists_lons_{mode}.npy", np.array(dists_lons))
+    np.save(f"./{step}h_idxs_{start}.npy", np.array(index_longest))
+    np.save(f"./{step}h_tc_ids_{start}.npy", np.array(tc_id_longest))
+    np.save(f"./{step}h_dists_{start}.npy", np.array(dists))
+    np.save(f"./{step}h_dists_lats_{mode}_{start}.npy", np.array(dists_lats))
+    np.save(f"./{step}h_dists_lons_{mode}_{start}.npy", np.array(dists_lons))
     return max_dist
         
 
