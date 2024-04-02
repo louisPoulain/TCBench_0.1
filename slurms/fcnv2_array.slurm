@@ -13,7 +13,7 @@
 #SBATCH --ntasks 1 
 #SBATCH --cpus-per-task 1
 #SBATCH --mem 32G 
-#SBATCH --time 00:40:00 
+#SBATCH --time 01:40:00 
 #SBATCH --export NONE
 
 # clearing modules and loading python
@@ -41,7 +41,7 @@ lead_time=$(awk -v ArrayTaskID=$SLURM_ARRAY_TASK_ID '$1==ArrayTaskID {print $4}'
 
 out=$(python3 /users/lpoulain/louis/TCBench_0.1/slurms/dates.py --date "$date" --time "$time" --lead_time "$lead_time")
 #echo "test this is out: $out" | cat >> ./out_files/fcnv2_multiple_${SLURM_ARRAY_JOB_ID}_${SLURM_ARRAY_TASK_ID}.out
-if ! compgen -G "${SAVE_DIR}/pangu_${out}*.nc" > /dev/null; then
+if ! compgen -G "${SAVE_DIR}/fourcastnetv2_${out}*.nc" > /dev/null; then
 
         echo "$date $time $lead_time $config $out" | cat >> ./out_files/fcnv2_multiple_${SLURM_ARRAY_JOB_ID}_${SLURM_ARRAY_TASK_ID}.out
         python3 slurms/fcnv2.py --date "$date" --time "$time" --ldt "$lead_time"
