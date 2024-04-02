@@ -107,9 +107,3 @@ for year in list(valid_dates.keys()):
                 client.retrieve(name=data_origin, request=data_params, target=target_path+"_old.grib")
                 subprocess.run(["bash", "-c", f"module load gcc proj cdo && cdo -R remapcon,r1440x721 -setgridtype,regular {target_path+'_old.grib'} {target_path+'.grib'}"])
                 subprocess.run(["bash", "-c", f"rm {target_path+'_old.grib'}"])
-                """subprocess.run(["bash", "-c", f"module load gcc proj cdo ncl && cdo -f nc copy {target_path+'.grib'} {target_path+'.nc'}"])
-                ds = xr.open_dataset(target_path+'.nc')
-                ds = ds.reindex(latitude=list(reversed(ds.latitude)))
-                ds.to_netcdf(target_path+'.nc')
-                subprocess.run(["bash", "-c", f"module load gcc proj cdo ncl && cdo -f grb copy setmissval,0 {target_path+'.nc'} {target_path+'.grib'}"])
-                """
