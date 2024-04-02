@@ -23,7 +23,7 @@ def get_forecast_data(data_path, model, lead_time, tc_id):
     
     key = lambda x: (get_start_date_nc(x), get_lead_time(x))
     
-    data_list = sorted(glob.glob(os.path.join(data_path, f"{model}*{tc_id}*.nc")), key=key)
+    data_list = sorted(glob.glob(os.path.join(data_path, f"{model}*{tc_id}*small.nc")), key=key)
     data_list = [path for path in data_list if get_lead_time(path)>=lead_time]
     
     data = []
@@ -61,7 +61,7 @@ def get_ibtracs_data(data_path="/work/FAC/FGSE/IDYST/tbeucler/default/raw_data/M
     df = df.iloc[step-1:]
     
     wind_col = "USA_WIND"
-    pres_col = [col for col in df.columns if "_PRES" in col]
+    pres_col = [col for col in df.columns if "_PRES" in col and "PRES_" not in col and col!="WMO_PRES"]
     key = lambda x: np.count_nonzero(df[x].values.astype("string")!=" ")
     
     pres_col = sorted(pres_col, key=key)[-1] # the one with the highest number of values reported
@@ -101,7 +101,7 @@ def data_loader(data_path, model_name, lead_time, season:int, basin:str,
     empty_tc = []
     df = pd.read_csv(df_path, dtype="string", na_filter=False)
     if basin.lower()!="all":
-        tc_ids = df[(df["SEASON"].astype(int)==season) & df["BASIN"]==basin]["SID"].unique()
+        tc_ids = df[(df["SEASON"].astype(int)==season) & (df["BASIN"]==basin)]["SID"].unique()
     else:
         tc_ids = df[(df["SEASON"].astype(int)==season)]["SID"].unique()
     
@@ -110,8 +110,9 @@ def data_loader(data_path, model_name, lead_time, season:int, basin:str,
     if False in [os.path.exists(save_path + f"Data/{season}/{model_name}_{lead_time}_{season}_{basin}_{x}.pkl") for x in\
                 ["wnd_forecasts", "wnd_truth", "pres_forecasts", "pres_truth", "tc_ids"]]:
         for i, tc_id in enumerate(tc_ids):
-            if i % (len(tc_ids)//3) == 0:
-                print(f"TC {i+1}/{len(tc_ids)}")
+            if len(tc_ids)>3:
+                if i % (len(tc_ids)//3) == 0:
+                    print(f"TC {i+1}/{len(tc_ids)}")
             forecast_data, truth_data = get_data(data_path, model_name, lead_time, tc_id, df_path)
             wind_col, pres_col = truth_data.columns[1:]
             if len(forecast_data)==0:
@@ -181,8 +182,9 @@ def statistics_loader(data_path, model_name, lead_time, season:int, basin,
     if False in [os.path.isfile(save_name) for save_name in save_names]:
         
         for i, tc_id in enumerate(tc_ids):
-            if i % (len(tc_ids)//3) == 0:
-                print(f"TC {i+1}/{len(tc_ids)}")
+            if len(tc_ids)>3:
+                if i % (len(tc_ids)//3) == 0:
+                    print(f"TC {i+1}/{len(tc_ids)}")
             forecast_data, truth_data = get_data(data_path, model_name, lead_time, tc_id, df_path)
             wind_col, pres_col = truth_data.columns[1:]
             if len(forecast_data)==0:
@@ -190,11 +192,23 @@ def statistics_loader(data_path, model_name, lead_time, season:int, basin,
                 continue
             
             wind_truth, pres_truth = truth_data[wind_col].values.astype("float") * 0.514444, truth_data[pres_col].values.astype("float") * 100
-            wind_truth_list.append(wind_truth)
-            pres_truth_list.append(pres_truth)
+            try:
+                wind_truth_list.append(wind_truth)
+                pres_truth_list.append(pres_truth)
+            except ValueError:
+                print(f"Error with {tc_id}")
+                print(pres_col)
+                print(wind_truth)
+                print(pres_truth)
+                raise ValueError
             
-            wind_forecast = np.array([np.sqrt(data.u10.values.astype("float")**2 + data.v10.values.astype("float")**2)\
+            try:
+                wind_forecast = np.array([np.sqrt(data.u10.values.astype("float")**2 + data.v10.values.astype("float")**2)\
                                     for data in forecast_data]).reshape(-1, 241, 241)
+            except ValueError:
+                print(f"Error with {tc_id}")
+                print([(data.u10.values.astype("float")**2 + data.v10.values.astype("float")**2).shape for data in forecast_data])
+                raise ValueError
             pres_forecast = np.array([data.msl.values.astype("float") for data in forecast_data]).reshape(-1, 241, 241)
             
             for stat in stats_list:

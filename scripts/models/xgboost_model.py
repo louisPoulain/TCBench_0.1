@@ -8,7 +8,7 @@ from xgboost_utils import create_dataset_new, create_booster, train_save_xgb, pl
 
 
 
-def gbtree(data_path, model_name, lead_time, seasons, basin, split_ratio:list,
+def gbtree(data_path, model_name, lead_time, seasons, force_in_train, basin, split_ratio:list,
             max_depth=6, n_rounds=30, learning_rate=0.3, gamma=0., stats=[],
             stats_wind=["max"], stats_pres=["min"], jsdiv=False, sched=False,
             df_path="/work/FAC/FGSE/IDYST/tbeucler/default/raw_data/ML_PREDICT/ERA5/TC_track_filtered_1980_00_06_12_18.csv",
@@ -23,10 +23,13 @@ def gbtree(data_path, model_name, lead_time, seasons, basin, split_ratio:list,
     dtrain_wind, dval_wind, dtest_wind,\
     dtrain_pres, dval_pres, dtest_pres,\
     stats, stats_wind, stats_pres, nb_tc,\
-    truth_wind_test, truth_pres_test = create_dataset_new(data_path=data_path, model_name=model_name, lead_time=lead_time, 
-                                                      seasons=seasons, basin=basin, split_ratio=split_ratio,
+    truth_wind_test, truth_pres_test,\
+    train_seasons, val_seasons, test_seasons, norma_cst = create_dataset_new(data_path=data_path, model_name=model_name, lead_time=lead_time, 
+                                                      seasons=seasons, force_in_train=force_in_train, basin=basin, split_ratio=split_ratio,
                                                       stats=stats, stats_wind=stats_wind, stats_pres=stats_pres, jsdiv=jsdiv,
                                                       df_path=df_path, save_path=save_path)
+    
+    print(f"Train seasons: {train_seasons}\nVal seasons: {val_seasons}\nTest seasons: {test_seasons}")
     
     params_wind, params_pres, evallist_wind, evallist_pres = create_booster("gbtree", dtrain_wind=dtrain_wind, dval_wind=dval_wind, 
                                                           dtrain_pres=dtrain_pres, dval_pres=dval_pres, max_depth=max_depth, 
@@ -34,11 +37,11 @@ def gbtree(data_path, model_name, lead_time, seasons, basin, split_ratio:list,
     
     # train and save models
     
-    wind_save = f"xgb_wind_{model_name}_{lead_time}h{loss_name}_basin_{basin}_{'_'.join(s for s in seasons)}_depth_{max_depth}"\
+    wind_save = f"xgb_wind_{model_name}_{lead_time}h{loss_name}_basin_{basin}_{'_'.join(s for s in sorted(train_seasons))}_depth_{max_depth}"\
                     + f"_epoch_{n_rounds}_lr_{learning_rate}_g_{gamma}"\
                     + (f"_sched" if sched else "")\
                     + f"_{'_'.join(stat for stat in stats_wind)}.json"
-    pres_save = f"xgb_pres_{model_name}_{lead_time}h{loss_name}_basin_{basin}_{'_'.join(s for s in seasons)}_depth_{max_depth}"\
+    pres_save = f"xgb_pres_{model_name}_{lead_time}h{loss_name}_basin_{basin}_{'_'.join(s for s in sorted(train_seasons))}_depth_{max_depth}"\
                     + f"_epoch_{n_rounds}_lr_{learning_rate}_g_{gamma}"\
                     + (f"_sched" if sched else "")\
                     + f"_{'_'.join(stat for stat in stats_pres)}.json"
@@ -60,13 +63,19 @@ def gbtree(data_path, model_name, lead_time, seasons, basin, split_ratio:list,
     
     test_loss_wind = np.sqrt(np.mean((ypred_wind - truth_wind_test)**2))
     test_loss_pres = np.sqrt(np.mean((ypred_pres - truth_pres_test)**2))
-    print(np.mean(ypred_pres), np.std(ypred_pres), np.min(ypred_pres), np.max(ypred_pres))
+    
+        
+    ypred_wind = ypred_wind * norma_cst["wind"]["Truth"][1] + norma_cst["wind"]["Truth"][0]
+    truth_wind_test = truth_wind_test * norma_cst["wind"]["Truth"][1] + norma_cst["wind"]["Truth"][0]
+    
+    ypred_pres = ypred_pres * norma_cst["pres"]["Truth"][1] + norma_cst["pres"]["Truth"][0]
+    truth_pres_test = truth_pres_test * norma_cst["pres"]["Truth"][1] + norma_cst["pres"]["Truth"][0]
     
     plot_xgb(bst_wind=bst_wind, bst_pres=bst_pres, eval_res_wind=eval_res_wind, eval_res_pres=eval_res_pres, 
-             model_name=model_name, xgb_model="gbtree", lead_time=lead_time, seasons=seasons, basin=basin, nb_tc=nb_tc,
-             max_depth=max_depth, n_rounds=n_rounds, learning_rate=learning_rate, gamma=gamma, sched=sched, stats=stats, 
-             stats_wind=stats_wind, stats_pres=stats_pres, jsdiv=jsdiv, test_loss_wind=test_loss_wind, test_loss_pres=test_loss_pres,
-             truth_wind_test=truth_wind_test, truth_pres_test=truth_pres_test, y_pred_wind=ypred_wind, y_pred_pres=ypred_pres,
+             model_name=model_name, xgb_model="gbtree", lead_time=lead_time, train_seasons=train_seasons, val_seasons=val_seasons,
+             test_seasons=test_seasons, basin=basin, nb_tc=nb_tc, max_depth=max_depth, n_rounds=n_rounds, learning_rate=learning_rate, 
+             gamma=gamma, sched=sched, stats=stats, stats_wind=stats_wind, stats_pres=stats_pres, jsdiv=jsdiv, test_loss_wind=test_loss_wind, 
+             test_loss_pres=test_loss_pres, truth_wind_test=truth_wind_test, truth_pres_test=truth_pres_test, y_pred_wind=ypred_wind, y_pred_pres=ypred_pres,
              save_path="/users/lpoulain/louis/plots/xgboost/"
              )
     
@@ -149,7 +158,8 @@ if __name__ == "__main__":
     parser.add_argument("--lead_time", type=int, default=6)
     parser.add_argument("--model", type=str, default="graphcast", choices=["graphcast", "pangu", "panguweather"])
     parser.add_argument("--seasons", type=str2list, default=["2000"])
-    parser.add_argument("--basin", type=str, default="NA", choices=["NA", "WP", "EP", "NI", "SI", "SP", "SA"])
+    parser.add_argument("--force_in_train", type=str2list, help="Force the seasons passed in the list to be in train set", default=[])
+    parser.add_argument("--basin", type=str, default="NA", choices=["NA", "WP", "EP", "NI", "SI", "SP", "all"]) # Not enough TCs in SA
     
     # type of xgb model
     parser.add_argument('-f', '--func', dest='func', choices=fct_dict.keys(), required=True,
@@ -163,7 +173,7 @@ if __name__ == "__main__":
     # xgb model params
     parser.add_argument("--model_args", type=str2list, default=["lr","0.05","depth","3","epochs","20"],
                         help="List of arguments for the model, in the form [arg1,val1,arg2,val2, ...]")
-    parser.add_argument("--js_div_loss", action="store_true", help="Use Jensen-Shannon divergence as loss function")
+    parser.add_argument("--jsdiv", action="store_true", help="Use Jensen-Shannon divergence as loss function")
     parser.add_argument("--sched", action="store_true", help="Use a scheduler for the learning rate [cos_annealing]")
     
     args = parser.parse_args()
@@ -174,6 +184,9 @@ if __name__ == "__main__":
     
     # AI models params
     lead_time, model, seasons, basin = args.lead_time, args.model, args.seasons, args.basin
+    force_in_train = args.force_in_train
+    if force_in_train == [''] or force_in_train == [' ']:
+        force_in_train = []
     
     # xgb method and inputs
     fct = fct_dict[args.func]
@@ -182,7 +195,7 @@ if __name__ == "__main__":
     # specific xgb model args
     model_args = {"depth":3, "epochs":20, "lr":0.01, "gamma":0.}
     models_args_dtypes = {"depth":int, "epochs":int, "lr":float, "gamma":float}
-    jsdiv = args.js_div_loss
+    jsdiv = args.jsdiv
     sched = args.sched
     
     for i in range(0, len(args.model_args), 2):
@@ -192,8 +205,14 @@ if __name__ == "__main__":
     
     # split ratio
     split_ratio = [float(ratio) for ratio in args.split_ratio]
+    if stats_wind == [''] or stats_wind == [' ']:
+        stats_wind = []
+    if stats_pres == [''] or stats_pres == [' ']:
+        stats_pres = []
+    if stats == [''] or stats == [' ']:
+        stats = []
     
-    fct(data_path=data_path, model_name=model, lead_time=lead_time, seasons=seasons, basin=basin, split_ratio=split_ratio,
+    fct(data_path=data_path, model_name=model, lead_time=lead_time, seasons=seasons, force_in_train=force_in_train, basin=basin, split_ratio=split_ratio,
             max_depth=model_args["depth"], n_rounds=model_args["epochs"], learning_rate=model_args["lr"], gamma=model_args["gamma"], 
             stats=stats, stats_wind=stats_wind, stats_pres=stats_pres, jsdiv=jsdiv, sched=sched,
             df_path="/work/FAC/FGSE/IDYST/tbeucler/default/raw_data/ML_PREDICT/ERA5/TC_track_filtered_1980_00_06_12_18.csv",
