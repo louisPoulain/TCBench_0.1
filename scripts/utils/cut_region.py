@@ -173,18 +173,10 @@ def cut_and_save_rect(ds_folder, models, df_tracks:pd.DataFrame, date_start, dat
                 for data_var in ds_new.data_vars:
                     encoding[data_var] = {
                     "original_shape": ds_new[data_var].shape,
-                    "_FillValue": ds_new[data_var].encoding.get(
-                        "_FillValue", -32767
-                    ),
+                    "_FillValue": -32767,
                     "dtype": np.int16,
-                    "add_offset": ds_new[data_var].encoding.get(
-                        "add_offset", ds_new[data_var].mean().compute().values
-                    ),
-                    "scale_factor": ds_new[data_var].encoding.get(
-                        "scale_factor",
-                        ds_new[data_var].std().compute().values
-                        / 1000, # save up to mean +- 32 std
-                    ),
+                    "add_offset": ds_new[data_var].mean().compute().values,
+                    "scale_factor": ds_new[data_var].std().compute().values / 1000, # save up to mean +- 32 std
                     # "zlib": True,
                     # "complevel": 5,
                     }
@@ -193,7 +185,7 @@ def cut_and_save_rect(ds_folder, models, df_tracks:pd.DataFrame, date_start, dat
             except KeyError:
                 print(f"KeyError for {date_start} to {date_end} ({lead_time}h)", flush=True)
                 continue
-        del ds
+            del ds
     return path
 
             
