@@ -180,8 +180,8 @@ def filter_tracks(path_ibtracs="/work/FAC/FGSE/IDYST/tbeucler/default/milton/rep
         for month in valid_dates[year].keys():
             valid_dates[year][month] = list(np.unique(sorted(flatten(valid_dates[year][month]))))
 
-    with open(f'{path_output}valid_dates_{min_year}_{"_".join(hour for hour in hours)}.pkl', 'wb') as f:
-        pickle.dump(valid_dates, f)
+    #with open(f'{path_output}valid_dates_{min_year}_{"_".join(hour for hour in hours)}.pkl', 'wb') as f:
+    #    pickle.dump(valid_dates, f)
     
     #df_final.to_csv(f'{path_output}TC_track_filtered_{min_year}_{"_".join(hour for hour in hours)}.csv', index=False)
     
