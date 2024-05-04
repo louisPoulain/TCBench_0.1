@@ -11,8 +11,12 @@ from utils.main_utils import get_start_date_nc, get_lead_time
 from utils.cut_region import haversine, cut_rectangle
 from case_studies.case_study_utils import find_trajectory_point, remove_duplicates
 from case_studies.case_study_loaders import get_era5, load_tc_forecast, load_pp_model, load_one_tc_forecast
+from intensities_nwp import intensity_nwp_norbert, intensity_nwp_katrina
 
-colors_dic = {"pangu": 'blue', "graphcast": 'green', "fourcastnetv2":"orange", "era5": 'red', "truth": 'black'}
+
+intensity_nwp = {"Katrina (2005)": intensity_nwp_katrina, "Norbert (2008)": intensity_nwp_norbert}
+colors_dic = {"pangu": 'blue', "graphcast": 'green', "fourcastnetv2":"orange", "era5": 'red', "truth": 'black', 'nwp': 'purple'}
+
 
 
 def trajectory(tc_id, model_names, max_lead_time=72, ldt_step=6, pp_type=None, pp_params=None,
@@ -60,6 +64,8 @@ def trajectory(tc_id, model_names, max_lead_time=72, ldt_step=6, pp_type=None, p
     assert tc_id in tc_sid_to_name.keys(), f"tc_id should be one of {list(tc_sid_to_name.keys())}"
     assert ldt_step%6==0, "ldt_step should be a multiple of 6"
     assert pp_type in [None, "linear", "xgboost", "cnn"], "pp_type should be one of [None, 'linear', 'xgboost', 'cnn']"
+    
+    intensity_nwp_tc = intensity_nwp[tc_sid_to_name[tc_id]]
 
     era5, valid_dates, df_filt, pres_col, df = get_era5(tc_id, data_path+"ERA5/", df_path)
     idxs = [i for i in range(era5.valid_time.shape[0]) if era5.valid_time[i].values.astype("datetime64[ns]") in valid_dates.astype("datetime64[ns]")]
@@ -120,6 +126,7 @@ def trajectory(tc_id, model_names, max_lead_time=72, ldt_step=6, pp_type=None, p
             
             lats, lons, winds, press, err_km = [], [], [], [], []
             winds_pp, press_pp = [], []
+            winds_nwp = []
             if pp_type=="cnn":
                 lats_pp, lons_pp, err_km_pp, std_wind_pp, std_pres_pp = [], [], [], [], []
             final_times = []
@@ -199,9 +206,20 @@ def trajectory(tc_id, model_names, max_lead_time=72, ldt_step=6, pp_type=None, p
                                     
                         winds_pp.append(wind)
                         press_pp.append(pres)
+                        
+                    
+                    if lead_time in intensity_nwp_tc.keys():
+                        if tmp_time in list(intensity_nwp_tc[lead_time].keys()):
+                            winds_nwp.append(intensity_nwp_tc[lead_time][np.datetime64(tmp_time, 'h')])
+                        else:
+                            winds_nwp.append(np.nan)
                     
             lats, lons, winds, press, err_km = np.array(lats), np.array(lons), np.array(winds), np.array(press), np.array(err_km)
             winds_pp, press_pp = np.array(winds_pp), np.array(press_pp)
+            winds_nwp = np.array(winds_nwp)
+            idx_no_nan = np.where(~np.isnan(winds_nwp))[0]
+            winds_nwp = winds_nwp[~np.isnan(winds_nwp)]
+            
             if pp_type=="cnn":
                 lats_pp, lons_pp, err_km_pp = np.array(lats_pp), np.array([l - 360 if l>180 else l for l in lons_pp]), np.array(err_km_pp)
                 std_wind_pp, std_pres_pp = np.array(std_wind_pp), np.array(std_pres_pp)
@@ -222,7 +240,8 @@ def trajectory(tc_id, model_names, max_lead_time=72, ldt_step=6, pp_type=None, p
                                         label=model+" + CNN", transform=ccrs.PlateCarree(), markersize=5)
             axs["Traj_"+model].add_feature(cfeature.COASTLINE.with_scale('50m'))
             axs["Traj_"+model].add_feature(cfeature.BORDERS.with_scale('50m'))
-            axs["Traj_"+model].legend(fontsize=13)
+            axs["Traj_"+model].legend(fontsize=17)
+            
             gridliner = axs["Traj_"+model].gridlines(crs=ccrs.PlateCarree(), draw_labels=True)
             gridliner.top_labels = False
             gridliner.bottom_labels = True
@@ -230,8 +249,7 @@ def trajectory(tc_id, model_names, max_lead_time=72, ldt_step=6, pp_type=None, p
             gridliner.right_labels = False
             gridliner.ylines = False
             gridliner.xlines = False
-            axs["Traj_"+model].set_title(f"Model: {model}", fontsize=18)
-            
+            axs["Traj_"+model].set_title(f"Model: {model}", fontsize=20)
             
             axs["Wind"].plot(winds, c=colors_dic[model], label=model)
             if pp_type is not None:
@@ -241,9 +259,11 @@ def trajectory(tc_id, model_names, max_lead_time=72, ldt_step=6, pp_type=None, p
                     axs["Wind"].fill_between(range(len(winds_pp)), winds_pp-std_wind_pp, winds_pp+std_wind_pp, color=colors_dic[model], alpha=0.2, linestyle='--')
             if model==model_names[0]:
                 axs["Wind"].plot(truth_wind, c=colors_dic['truth'], label="IBTrACS (Truth)")
-                axs["Wind"].set_ylabel("Wind speed (m/s)", fontsize=15)
+                if lead_time in intensity_nwp_tc.keys():
+                    axs["Wind"].plot(idx_no_nan, winds_nwp, c=colors_dic['nwp'], label=f"NWP ({intensity_nwp_tc['nwp']})")
+                axs["Wind"].set_ylabel("Wind speed (m/s)", fontsize=20)
             axs["Wind"].tick_params(axis='x', which='both', top=False, bottom=True, labelbottom=False)
-            axs["Wind"].legend(fontsize=13)
+            axs["Wind"].legend(fontsize=17)
                 
             axs["Pres"].plot(press, c=colors_dic[model], label=model)
             if pp_type is not None:
@@ -253,15 +273,15 @@ def trajectory(tc_id, model_names, max_lead_time=72, ldt_step=6, pp_type=None, p
                     axs["Pres"].fill_between(range(len(press_pp)), press_pp-std_pres_pp, press_pp+std_pres_pp, color=colors_dic[model], alpha=0.2, linestyle='--')
             if model==model_names[0]:
                 axs["Pres"].plot(truth_pres, c=colors_dic['truth'], label="IBTrACS (Truth)")
-                axs["Pres"].set_ylabel("Pressure (Pa)", fontsize=15)
+                axs["Pres"].set_ylabel("Pressure (Pa)", fontsize=20)
             axs["Pres"].tick_params(axis='x', which='both', top=False, bottom=True, labelbottom=False)
-            axs["Pres"].legend(fontsize=13)
+            axs["Pres"].legend(fontsize=17)
             
             
             axs["km_error"].plot(err_km, c=colors_dic[model], label=model)
-            axs["km_error"].legend(fontsize=13)
+            axs["km_error"].legend(fontsize=17)
             if model==model_names[0]:
-                axs["km_error"].set_ylabel("Error (km)", fontsize=15)
+                axs["km_error"].set_ylabel("Error (km)", fontsize=20)
             if pp_type=='cnn':
                 axs["km_error"].plot(err_km_pp, c=colors_dic[model], label=model+" + CNN", linestyle='--')
                 
@@ -298,7 +318,7 @@ def trajectory(tc_id, model_names, max_lead_time=72, ldt_step=6, pp_type=None, p
         axs["Traj_ERA5"].add_feature(cfeature.BORDERS.with_scale('50m'))
         axs["Traj_ERA5"].plot(lons_plot, lats, '-x', c=colors_dic['era5'], label="ERA5", transform=ccrs.PlateCarree(), markersize=5)
         axs["Traj_ERA5"].plot(truth_lons_plot, truth_lats, '-x', c=colors_dic['truth'], label="IBTrACS (Truth)", transform=ccrs.PlateCarree(), markersize=5)
-        axs["Traj_ERA5"].legend(fontsize=13)
+        axs["Traj_ERA5"].legend(fontsize=17)
         gridliner = axs["Traj_ERA5"].gridlines(crs=ccrs.PlateCarree(), draw_labels=True)
         gridliner.top_labels = False
         gridliner.bottom_labels = True
@@ -306,19 +326,19 @@ def trajectory(tc_id, model_names, max_lead_time=72, ldt_step=6, pp_type=None, p
         gridliner.right_labels = False
         gridliner.ylines = False
         gridliner.xlines = False
-        axs["Traj_ERA5"].set_title(f"Model: ERA5", fontsize=18)
-        axs["Traj_ERA5"].annotate(f"Trajectory comparison", xy=(0.5, 0.94), xycoords="figure fraction", ha="center", fontsize=20)
+        axs["Traj_ERA5"].set_title(f"Model: ERA5", fontsize=20)
+        axs["Traj_ERA5"].annotate(f"Trajectory comparison", xy=(0.5, 0.96), xycoords="figure fraction", ha="center", fontsize=20)
         
         
         axs["Wind"].plot(winds, c=colors_dic['era5'], label="ERA5")
-        axs["Wind"].legend(fontsize=13)
-        axs["Wind"].annotate(f"Evolution of wind speed", xy=(0.5, 0.71), xycoords="figure fraction", ha="center", fontsize=20)
+        axs["Wind"].legend(fontsize=17)
+        axs["Wind"].annotate(f"Evolution of wind speed", xy=(0.5, 0.735), xycoords="figure fraction", ha="center", fontsize=20)
         axs["Wind"].set_xticks(ticks=range(len(winds)) if len(winds) < 10 else range(len(winds))[::len(final_times)//10])
         
         
         axs["Pres"].plot(press, c=colors_dic['era5'], label="ERA5")
-        axs["Pres"].legend(fontsize=13)
-        axs["Pres"].annotate(f"Evolution of pressure", xy=(0.5, 0.485), xycoords="figure fraction", ha="center", fontsize=20)
+        axs["Pres"].legend(fontsize=17)
+        axs["Pres"].annotate(f"Evolution of pressure", xy=(0.5, 0.51), xycoords="figure fraction", ha="center", fontsize=20)
         axs["Pres"].set_xticks(ticks=range(len(winds)) if len(winds) < 10 else range(len(winds))[::len(final_times)//10])
         
         
@@ -326,10 +346,10 @@ def trajectory(tc_id, model_names, max_lead_time=72, ldt_step=6, pp_type=None, p
         axs["km_error"].set_xticks(ticks=range(len(winds)) if len(winds) < 10 else range(len(winds))[::len(final_times)//10], 
                                           labels=[str(x) for x in final_times] if len(winds) < 10 else [str(x) for x in final_times][::len(final_times)//10], 
                                           rotation=45, 
-                                          horizontalalignment='right', fontsize='small')
-        axs["km_error"].legend(fontsize=13)
-        axs["km_error"].set_xlabel("Time", fontsize=15)
-        axs["km_error"].annotate(f"Evolution of location error", xy=(0.5, 0.26), xycoords="figure fraction", ha="center", fontsize=20)
+                                          horizontalalignment='right', fontsize=15)
+        axs["km_error"].legend(fontsize=17)
+        axs["km_error"].set_xlabel("Time", fontsize=20)
+        axs["km_error"].annotate(f"Evolution of location error", xy=(0.5, 0.285), xycoords="figure fraction", ha="center", fontsize=20)
         
         
         pp_msg = f"Post-processing: {pp_type}" if pp_type is not None else "No post-processing"
@@ -364,9 +384,9 @@ def trajectory(tc_id, model_names, max_lead_time=72, ldt_step=6, pp_type=None, p
                 pp_save += f"pres_{pp_params['pres']}"
             
             
-        st = fig.suptitle(f"Trajectory comparison for {tc_sid_to_name[tc_id]} - Lead time: {lead_time}h\n{pp_msg}", fontsize=20)
+        st = fig.suptitle(f"Trajectory comparison for {tc_sid_to_name[tc_id]} - Lead time: {lead_time}h\n{pp_msg}", fontsize=25)
         st.set_y(0.98)
-        fig.savefig(plot_path + f"trajectory_{tc_id}_{lead_time}{pp_save}.png", dpi=500, bbox_inches="tight")
+        fig.savefig(plot_path + f"trajectory_{tc_id}_{lead_time}{pp_save}.pdf", bbox_inches="tight")
         plt.close(fig)
         
         
@@ -375,13 +395,13 @@ def trajectory(tc_id, model_names, max_lead_time=72, ldt_step=6, pp_type=None, p
     for key in mean_err.keys():
         axs2['mean_err'].plot(lead_times, mean_err[key], label=key if key in model_names+['era5'] else " + ".join(key.split('_')),
                                 linestyle='--' if key not in model_names+['era5'] else '-', c=colors_dic[key.split('_')[0]])
-    axs2['mean_err'].legend(fontsize=13)
+    axs2['mean_err'].legend(fontsize=17)
     axs2['mean_err'].set_xlabel("Lead time (h)")
     axs2['mean_err'].set_ylabel("Mean error (km)")
     axs2['mean_err'].set_title(f"Mean error for {tc_sid_to_name[tc_id]}")
     
-    fig.suptitle(f"Mean error for {tc_sid_to_name[tc_id]} at each lead time", fontsize=20)
-    fig2.savefig(plot_path + f"mean_err_{tc_id}_{'_'.join(str(l) for l in lead_times)}{pp_save}.png", dpi=64, bbox_inches="tight")
+    fig.suptitle(f"Mean error for {tc_sid_to_name[tc_id]} at each lead time", fontsize=25)
+    fig2.savefig(plot_path + f"mean_err_{tc_id}_{'_'.join(str(l) for l in lead_times)}{pp_save}.pdf", bbox_inches="tight")
         
         
         
