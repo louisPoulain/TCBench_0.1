@@ -3,6 +3,7 @@ from cnn_blocks import CNN4PP
 from torch.utils.data import DataLoader
 from argparse import ArgumentParser
 from cnn_utils import CRPSLoss, CRPSNumpy
+from helpers_comparison_cnn import get_pit_points, plot_pit_dict, calculate_spread_skill
 
 import torch, time, random, sys
 import numpy as np
@@ -415,6 +416,10 @@ def final_test_probabilistic(model_name, pres, epochs, learning_rate, optim, sch
     spread_skill_train = {}
     spread_skill_val = {}
     spread_skill_test = {}
+    pit_pts_train = {}
+    pit_pts_val = {}
+    pit_pts_test = {}
+    
     
     criterion = lambda x,y,z: CRPSNumpy(x,y,z, reduction='none')
     
@@ -431,25 +436,30 @@ def final_test_probabilistic(model_name, pres, epochs, learning_rate, optim, sch
         spread_skill_val[ldt] = np.array([[calculate_spread_skill(val_targets[ldt][:, i], m_val[:, i], std_val[:, i], val_rmse_cnn[ldt][i])] for i in range(4)]).squeeze()
         spread_skill_test[ldt] = np.array([[calculate_spread_skill(test_targets[ldt][:, i], m_test[:, i], std_test[:, i], test_rmse_cnn[ldt][i])] for i in range(4)]).squeeze()
 
+        pit_pts_train[ldt] = [get_pit_points(train_targets[ldt][:, i], m_train[:, i], std_train[:, i]) for i in range(4)]
+        if int(float(ldt)) == 6:
+            print([pit_pts_train[ldt][i]['pit_counts'] for i in range(4)])
+        pit_pts_val[ldt] = [get_pit_points(val_targets[ldt][:, i], m_val[:, i], std_val[:, i]) for i in range(4)]
+        pit_pts_test[ldt] = [get_pit_points(test_targets[ldt][:, i], m_test[:, i], std_test[:, i]) for i in range(4)]
     
     for ldt in train_targets.keys():
-        with open(f"{save_path}/Final_comp/{model_name}_CRPS_pres_{pres}_ldt_{int(float(ldt))}_epochs_{epochs}_lr_{learning_rate}_optim_{optim}"\
-                        + f"_sched_{sched}_{'_'.join(train_seasons)}.txt", 'w') as f:
-            
-            f.write(f"Train losses: {np.round(indiv_losses_train, 3)}\n")
-            f.write(f"Val losses: {np.round(indiv_losses_val, 3)}\n")
-            f.write(f"Test losses: {np.round(indiv_losses_test, 3)}\n")
-            f.write(f"\n")
-            f.write(f"Train RMSE CNN (ensemble mean error): {np.round(train_rmse_cnn[ldt], 3)}\n")
-            f.write(f"Val RMSE CNN (ensemble mean error): {np.round(val_rmse_cnn[ldt], 3)}\n")
-            f.write(f"Test RMSE CNN (ensemble mean error): {np.round(test_rmse_cnn[ldt], 3)}\n")
-            f.write(f"\n")
-            f.write(f"Train CRPS CNN (mean CRPS): {np.round(np.mean(train_crps_cnn[ldt], axis=0), 3)}\n")
-            f.write(f"Val CRPS CNN (mean CRPS): {np.round(np.mean(val_crps_cnn[ldt], axis=0), 3)}\n")
-            f.write(f"Test CRPS CNN (mean CRPS): {np.round(np.mean(test_crps_cnn[ldt], axis=0), 3)}\n")
-            f.write(f"\n")
+        #with open(f"{save_path}/Final_comp/{model_name}_CRPS_pres_{pres}_ldt_{int(float(ldt))}_epochs_{epochs}_lr_{learning_rate}_optim_{optim}"\
+        #                + f"_sched_{sched}_{'_'.join(train_seasons)}.txt", 'w') as f:
+        #    
+        #    f.write(f"Train losses: {np.round(indiv_losses_train, 3)}\n")
+        #    f.write(f"Val losses: {np.round(indiv_losses_val, 3)}\n")
+        #    f.write(f"Test losses: {np.round(indiv_losses_test, 3)}\n")
+        #    f.write(f"\n")
+        #    f.write(f"Train RMSE CNN (ensemble mean error): {np.round(train_rmse_cnn[ldt], 3)}\n")
+        #    f.write(f"Val RMSE CNN (ensemble mean error): {np.round(val_rmse_cnn[ldt], 3)}\n")
+        #    f.write(f"Test RMSE CNN (ensemble mean error): {np.round(test_rmse_cnn[ldt], 3)}\n")
+        #    f.write(f"\n")
+        #    f.write(f"Train CRPS CNN (mean CRPS): {np.round(np.mean(train_crps_cnn[ldt], axis=0), 3)}\n")
+        #    f.write(f"Val CRPS CNN (mean CRPS): {np.round(np.mean(val_crps_cnn[ldt], axis=0), 3)}\n")
+        #    f.write(f"Test CRPS CNN (mean CRPS): {np.round(np.mean(test_crps_cnn[ldt], axis=0), 3)}\n")
+        #    f.write(f"\n")
         
-        fig, axs = plt.subplot_mosaic([['Wind', 'Pressure'], ['Latitude', 'Longitude']], figsize=(12,12), gridspec_kw={'hspace': 0.3, 'wspace': 0.3})
+        fig, axs = plt.subplot_mosaic([['Wind', 'Pressure'], ['Latitude', 'Longitude']], figsize=(15,15), gridspec_kw={'hspace': 0.3, 'wspace': 0.3})
         
         ss_train = spread_skill_train[ldt]
         ss_val = spread_skill_val[ldt]
@@ -459,91 +469,72 @@ def final_test_probabilistic(model_name, pres, epochs, learning_rate, optim, sch
         axs['Wind'].plot(ss_val[0,0][ss_val[0,0]>-999], ss_val[0,1][ss_val[0,1]>-999], label='Val', color='orange', marker='o')
         axs['Wind'].plot(ss_test[0,0][ss_test[0,0]>-999], ss_test[0,1][ss_test[0,1]>-999], label='Test', color='green', marker='D')
         axs['Wind'].plot(axs['Wind'].get_xlim(), axs['Wind'].get_xlim(), label='y=x', color='black', linestyle='-', alpha=0.5)
-        axs['Wind'].set_title(f"Wind speed", fontsize=15)
-        axs['Wind'].set_xlabel('Spread (uncertainty, m/s)', fontsize=15)
-        axs['Wind'].set_ylabel('Skill (RMSE, m/s)', fontsize=15)
-        axs['Wind'].annotate("Overconfident model", xy=(0.5, 0.95), xycoords='axes fraction', ha='center', fontsize=12, color='black')
-        axs['Wind'].annotate("Underconfident model", xy=(0.75, 0.05), xycoords='axes fraction', ha='center', fontsize=12, color='black')
-        axs['Wind'].legend()
+        axs['Wind'].set_title(f"Wind speed", fontsize=18)
+        axs['Wind'].set_xlabel('Spread (uncertainty, m/s)', fontsize=17)
+        axs['Wind'].set_ylabel('Skill (RMSE, m/s)', fontsize=17)
+        axs['Wind'].annotate("Overconfident model", xy=(0.5, 0.95), xycoords='axes fraction', ha='center', fontsize=18, color='black')
+        axs['Wind'].annotate("Underconfident model", xy=(0.5, 0.02), xycoords='axes fraction', ha='center', fontsize=18, color='black')
+        axs['Wind'].legend(fontsize=17)
         
         axs['Pressure'].plot(ss_train[1,0][ss_train[1,0]>-999], ss_train[1,1][ss_train[1,1]>-999], label='Train', color='blue', marker='x')
         axs['Pressure'].plot(ss_val[1,0][ss_val[1,0]>-999], ss_val[1,1][ss_val[1,1]>-999], label='Val', color='orange', marker='o')
         axs['Pressure'].plot(ss_test[1,0][ss_test[1,0]>-999], ss_test[1,1][ss_test[1,1]>-999], label='Test', color='green', marker='D')
         axs['Pressure'].plot(axs['Pressure'].get_xlim(), axs['Pressure'].get_xlim(), label='y=x', color='black', linestyle='-', alpha=0.5)
-        axs['Pressure'].set_title(f"Minimum sea-level pressure", fontsize=15)
-        axs['Pressure'].set_xlabel('Spread (uncertainty, Pa)', fontsize=15)
-        axs['Pressure'].set_ylabel('Skill (RMSE, Pa)', fontsize=15)
-        axs['Pressure'].annotate("Overconfident model", xy=(0.5, 0.95), xycoords='axes fraction', ha='center', fontsize=12, color='black')
-        axs['Pressure'].annotate("Underconfident model", xy=(0.75, 0.05), xycoords='axes fraction', ha='center', fontsize=12, color='black')
-        axs['Pressure'].legend()
+        axs['Pressure'].set_title(f"Minimum sea-level pressure", fontsize=18)
+        axs['Pressure'].set_xlabel('Spread (uncertainty, Pa)', fontsize=17)
+        axs['Pressure'].set_ylabel('Skill (RMSE, Pa)', fontsize=17)
+        axs['Pressure'].annotate("Overconfident model", xy=(0.5, 0.95), xycoords='axes fraction', ha='center', fontsize=18, color='black')
+        axs['Pressure'].annotate("Underconfident model", xy=(0.5, 0.02), xycoords='axes fraction', ha='center', fontsize=18, color='black')
+        axs['Pressure'].legend(fontsize=17)
         
         axs['Latitude'].plot(ss_train[2,0][ss_train[2,0]>-999], ss_train[2,1][ss_train[2,1]>-999], label='Train', color='blue', marker='x')
         axs['Latitude'].plot(ss_val[2,0][ss_val[2,0]>-999], ss_val[2,1][ss_val[2,1]>-999], label='Val', color='orange', marker='o')
         axs['Latitude'].plot(ss_test[2,0][ss_test[2,0]>-999], ss_test[2,1][ss_test[2,1]>-999], label='Test', color='green', marker='D')
         axs['Latitude'].plot(axs['Latitude'].get_xlim(), axs['Latitude'].get_xlim(), label='y=x', color='black', linestyle='-', alpha=0.5)
-        axs['Latitude'].set_title(f"Latitude", fontsize=15)
-        axs['Latitude'].set_xlabel('Spread (uncertainty, degrees north)', fontsize=15)
-        axs['Latitude'].set_ylabel('Skill (RMSE, degrees north)', fontsize=15)
-        axs['Latitude'].annotate("Overconfident model", xy=(0.5, 0.95), xycoords='axes fraction', ha='center', fontsize=12, color='black')
-        axs['Latitude'].annotate("Underconfident model", xy=(0.75, 0.05), xycoords='axes fraction', ha='center', fontsize=12, color='black')
-        axs['Latitude'].legend()
+        axs['Latitude'].set_title(f"Latitude", fontsize=18)
+        axs['Latitude'].set_xlabel('Spread (uncertainty, degrees north)', fontsize=17)
+        axs['Latitude'].set_ylabel('Skill (RMSE, degrees north)', fontsize=17)
+        axs['Latitude'].annotate("Overconfident model", xy=(0.5, 0.95), xycoords='axes fraction', ha='center', fontsize=18, color='black')
+        axs['Latitude'].annotate("Underconfident model", xy=(0.5, 0.02), xycoords='axes fraction', ha='center', fontsize=18, color='black')
+        axs['Latitude'].legend(fontsize=17)
         
         axs['Longitude'].plot(ss_train[3,0][ss_train[3,0]>-999], ss_train[3,1][ss_train[3,1]>-999], label='Train', color='blue', marker='x')
         axs['Longitude'].plot(ss_val[3,0][ss_val[3,0]>-999], ss_val[3,1][ss_val[3,1]>-999], label='Val', color='orange', marker='o')
         axs['Longitude'].plot(ss_test[3,0][ss_test[3,0]>-999], ss_test[3,1][ss_test[3,1]>-999], label='Test', color='green', marker='D')
         axs['Longitude'].plot(axs['Longitude'].get_xlim(), axs['Longitude'].get_xlim(), label='y=x', color='black', linestyle='-', alpha=0.5)
-        axs['Longitude'].set_title(f"Longitude", fontsize=15)
-        axs['Longitude'].set_xlabel('Spread (uncertainty, degrees east)', fontsize=15)
-        axs['Longitude'].set_ylabel('Skill (RMSE, degrees east)', fontsize=15)
-        axs['Longitude'].annotate("Overconfident model", xy=(0.5, 0.95), xycoords='axes fraction', ha='center', fontsize=12, color='black')
-        axs['Longitude'].annotate("Underconfident model", xy=(0.75, 0.05), xycoords='axes fraction', ha='center', fontsize=12, color='black')
-        axs['Longitude'].legend()
+        axs['Longitude'].set_title(f"Longitude", fontsize=18)
+        axs['Longitude'].set_xlabel('Spread (uncertainty, degrees east)', fontsize=17)
+        axs['Longitude'].set_ylabel('Skill (RMSE, degrees east)', fontsize=17)
+        axs['Longitude'].annotate("Overconfident model", xy=(0.5, 0.95), xycoords='axes fraction', ha='center', fontsize=18, color='black')
+        axs['Longitude'].annotate("Underconfident model", xy=(0.5, 0.02), xycoords='axes fraction', ha='center', fontsize=18, color='black')
+        axs['Longitude'].legend(fontsize=17)
         
-        fig.suptitle(f"Spread-skill for {model_name} at {int(float(ldt))}h")
-        fig.savefig(f"{save_path}/Final_comp/{model_name}_spread_skill_pres_{pres}_ldt_{int(float(ldt))}_epochs_{epochs}_lr_{learning_rate}_optim_{optim}"\
-                        + f"_sched_{sched}_{'_'.join(train_seasons)}.png", dpi=100)
+        fig.suptitle(f"Spread-skill for {model_name} at {int(float(ldt))}h", fontsize=20)
+        #fig.savefig(f"{save_path}/Final_comp/{model_name}_spread_skill_pres_{pres}_ldt_{int(float(ldt))}_epochs_{epochs}_lr_{learning_rate}_optim_{optim}"\
+        #                + f"_sched_{sched}_{'_'.join(train_seasons)}.pdf")
         plt.close(fig)
+        
+        dict_pits = {"Train": {"Wind": pit_pts_train[ldt][0],
+                               "Pres": pit_pts_train[ldt][1],
+                               "Lat": pit_pts_train[ldt][2],
+                               "Lon": pit_pts_train[ldt][3]},
+                     "Val": {"Wind": pit_pts_val[ldt][0],
+                             "Pres": pit_pts_val[ldt][1],
+                             "Lat": pit_pts_val[ldt][2],
+                             "Lon": pit_pts_val[ldt][3]},
+                     "Test": {"Wind": pit_pts_test[ldt][0],
+                              "Pres": pit_pts_test[ldt][1],
+                              "Lat": pit_pts_test[ldt][2],
+                              "Lon": pit_pts_test[ldt][3]}
+                    }
+        for c in ["Train", "Val", "Test"]:
+            dict_pit = dict_pits[c]
+            if c=='Train' and int(float(ldt))==6:
+                print([dict_pit[key]['pit_centers'] for key in dict_pit.keys()])
+            plot_pit_dict(dict_pit, bar_label=["Wind", "Pres", "Lat", "Lon"], title=f"PIT points for {model_name} at lead time {int(float(ldt))}h ({c})",
+                      model=model_name, ldt=int(float(ldt)), split=c)
             
     print("finished")        
-    
-                
-    
-    
-def calculate_spread_skill(ytrue, ymean, ystd, model_rmse,
-                           bins=None, nBins=20,
-                           returnBins=False):
-    
-    # taken from https://github.com/thunderhoser/cira_uq4ml/blob/main/regression_multi_datasets.ipynb
-    # here we assume that ytrue etc correspond each to ONE variable (wind, pres, lat, lon)
-    
-    minBin = np.min([model_rmse, ystd.min()])
-    maxBin = np.ceil(np.max([model_rmse, ystd.max()]))
-    if not bins:
-        bins = np.round(np.linspace(minBin, maxBin, nBins + 1), 1)
-    else:
-        nBins = len(bins) - 1
-
-    error = np.empty((nBins))
-    spread = np.empty((nBins))
-    for i in range(nBins):
-        refs = np.logical_and(ystd >= bins[i], ystd < bins[i + 1])
-        if np.count_nonzero(refs) > 0:
-            ytrueBin = ytrue[refs]
-            ymeanBin = ymean[refs]
-            error[i] = np.sqrt(np.mean((ytrueBin - ymeanBin)**2, axis=0))
-            spread[i] = np.mean(ystd[refs])
-            if error[i] > maxBin: # not sure why there is a bug for longitude, preventive fix
-                error[i] = -999
-                spread[i] = -999
-        else:
-            error[i] = -999
-            spread[i] = -999
-    
-    if returnBins:
-        return spread, error, bins
-    else:
-        return spread, error
-    
       
     
 if __name__ == "__main__":
@@ -558,15 +549,15 @@ if __name__ == "__main__":
     small = args.small
     crps = args.crps
     
-    model_name = "pangu"
+    model_name = "graphcast"
     pres = True
     epochs = 90
     learning_rate = 0.01
     optim = "adam"
     sched = "cosine_annealing"
     
-    train_seasons = ['2000', '2001', '2003', '2004', '2006', '2007']
-    val_seasons = ['2002', '2005']
+    train_seasons = ['2000', '2001', '2002', '2004', '2005', '2007']
+    val_seasons = ['2003', '2006']
     test_seasons = '2008'
     
     if not crps:
