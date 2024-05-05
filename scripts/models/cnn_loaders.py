@@ -66,9 +66,9 @@ class CNN4PP_Dataset(Dataset):
         self.model_name = "pangu" if model_name in ["pangu", "panguweather"] else model_name
         self.data_folder = "panguweather" if model_name=="pangu" else model_name
         self.train_seasons = train_seasons
-        self.delta_lat_mean, self.delta_lon_mean = 0, 0
-        self.delta_lat_std, self.delta_lon_std = 0, 0
-        delta_lon_mean_sq, delta_lat_mean_sq = 0, 0
+        #self.delta_lat_mean, self.delta_lon_mean = 0, 0
+        #self.delta_lat_std, self.delta_lon_std = 0, 0
+        #delta_lon_mean_sq, delta_lat_mean_sq = 0, 0
 
         ibtracs_df = pd.read_csv(ibtracs_path, na_filter=False, dtype="string")
         self.ibtracs_df, self.valid_dates, self.pres_columns = get_ibtracs_data(ibtracs_df, seasons, pres=pres)
@@ -77,7 +77,7 @@ class CNN4PP_Dataset(Dataset):
         self.data_list = []
         self.data_list_scratch = []
         self.ll = [0] * len(self.seasons)
-        deltas_counter = 0
+        #deltas_counter = 0
         
         for i, season in enumerate(seasons):
             if not os.path.isfile(os.path.join(save_path, f"Data/{self.data_folder}/netcdf/Data_list_{season}_p_{self.pres}.pkl")):
@@ -109,17 +109,17 @@ class CNN4PP_Dataset(Dataset):
             with open(os.path.join(save_path, f"Data/{self.data_folder}/scratch/Data_list_{season}_p_{self.pres}.pkl"), "rb") as f:
                 self.data_list_scratch.append(pickle.load(f))
             
-        for season in train_seasons:
-            self.delta_lat_mean += np.load(f"/scratch/lpoulain/{season}/lat_diff_mean_p_{self.pres}.npy") * DELTAS_PER_SEASON[f"p_{self.pres}"][season]
-            self.delta_lon_mean += np.load(f"/scratch/lpoulain/{season}/lon_diff_mean_p_{self.pres}.npy") * DELTAS_PER_SEASON[f"p_{self.pres}"][season]
-            delta_lat_mean_sq += np.load(f"/scratch/lpoulain/{season}/lat_diff_meanx2_p_{self.pres}.npy") * DELTAS_PER_SEASON[f"p_{self.pres}"][season]
-            delta_lon_mean_sq += np.load(f"/scratch/lpoulain/{season}/lon_diff_meanx2_p_{self.pres}.npy") * DELTAS_PER_SEASON[f"p_{self.pres}"][season]
-            deltas_counter += DELTAS_PER_SEASON[f"p_{self.pres}"][season]
+        #for season in train_seasons:
+        #    self.delta_lat_mean += np.load(f"/scratch/lpoulain/{season}/lat_diff_mean_p_{self.pres}.npy") * DELTAS_PER_SEASON[f"p_{self.pres}"][season]
+        #    self.delta_lon_mean += np.load(f"/scratch/lpoulain/{season}/lon_diff_mean_p_{self.pres}.npy") * DELTAS_PER_SEASON[f"p_{self.pres}"][season]
+        #    delta_lat_mean_sq += np.load(f"/scratch/lpoulain/{season}/lat_diff_meanx2_p_{self.pres}.npy") * DELTAS_PER_SEASON[f"p_{self.pres}"][season]
+        #    delta_lon_mean_sq += np.load(f"/scratch/lpoulain/{season}/lon_diff_meanx2_p_{self.pres}.npy") * DELTAS_PER_SEASON[f"p_{self.pres}"][season]
+        #    deltas_counter += DELTAS_PER_SEASON[f"p_{self.pres}"][season]
             
-        self.delta_lat_mean /= deltas_counter
-        self.delta_lon_mean /= deltas_counter
-        self.delta_lat_std = np.sqrt(delta_lat_mean_sq/deltas_counter - self.delta_lat_mean**2)
-        self.delta_lon_std = np.sqrt(delta_lon_mean_sq/deltas_counter - self.delta_lon_mean**2)
+        #self.delta_lat_mean /= deltas_counter
+        #self.delta_lon_mean /= deltas_counter
+        #self.delta_lat_std = np.sqrt(delta_lat_mean_sq/deltas_counter - self.delta_lat_mean**2)
+        #self.delta_lon_std = np.sqrt(delta_lon_mean_sq/deltas_counter - self.delta_lon_mean**2)
         
         #self.pkl2npy()
         #self.rename()
@@ -140,8 +140,8 @@ class CNN4PP_Dataset(Dataset):
         self.get_target_normalisation_cst()
         self.get_input_normalisation_cst()
         
-        self.target_mean = np.concatenate((self.target_mean, [self.delta_lat_mean, self.delta_lon_mean]))
-        self.target_std = np.concatenate((self.target_std, [self.delta_lat_std, self.delta_lon_std]))
+        #self.target_mean = np.concatenate((self.target_mean, [self.delta_lat_mean, self.delta_lon_mean]))
+        #self.target_std = np.concatenate((self.target_std, [self.delta_lat_std, self.delta_lon_std]))
         self.wind_extent = (np.array([Q1_WIND, MAX_WIND]) - self.mean[0].mean()) / self.std[0].mean()
         if pres:
             self.pres_extent = (np.array([MIN_PRES, Q3_PRES]) - self.mean[1].mean()) / self.std[1].mean()
@@ -436,10 +436,10 @@ class CNN4PP_Dataset(Dataset):
             pres = ds.msl.values.astype(np.float32)
             pres_truth = df[df["ISO_TIME"].astype("datetime64[ns]").isin(times)][self.pres_columns[tc_id]].values.astype(np.float32) * 100
         
-        truth = np.column_stack([wind_truth, pres_truth, [end_lat-start_lat for end_lat in end_lats], 
-                                    [end_lon-start_lon for end_lon in end_lons]]) if self.pres else\
-                np.column_stack([wind_truth, [end_lat-start_lat for end_lat in end_lats], [end_lon-start_lon for end_lon in end_lons]])
-
+        #truth = np.column_stack([wind_truth, pres_truth, [end_lat-start_lat for end_lat in end_lats], 
+        #                            [end_lon-start_lon for end_lon in end_lons]]) if self.pres else\
+        #        np.column_stack([wind_truth, [end_lat-start_lat for end_lat in end_lats], [end_lon-start_lon for end_lon in end_lons]])
+        truth = np.column_stack([wind_truth, pres_truth]) if self.pres else wind_truth
         ds.close()
         del ds
         # Save shape for fields is b*c*h*w

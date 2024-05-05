@@ -72,9 +72,9 @@ class CNN4PP(nn.Module):
         self.s4 = conv_output_shape(*self.s3, out_channels*4, kernel_size, padding, stride, dil=1)
         self.s5 = conv_output_shape(*self.s4, 1, kernel_size, padding, stride, dil=1)
         if deterministic:
-            self.final_mlp = MLP4coords(np.prod(self.s5)+4, 4, hidden_features=8)
+            self.final_mlp = MLP4coords(np.prod(self.s5)+4, 2, hidden_features=8)
         else:
-            self.final_mlp = MLP4coords(np.prod(self.s5)+4, 8, hidden_features=8)
+            self.final_mlp = MLP4coords(np.prod(self.s5)+4, 4, hidden_features=8)
     
     def forward(self, x, y):
         y = self.input_mlp(y)
