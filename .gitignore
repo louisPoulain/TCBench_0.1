@@ -1,3 +1,11 @@
+# pyc files
+*.pyc
+**/__init__/*.pyc
+**/utils/*.pyc
+scripts/__pycache__/*.pyc
+
+# slurm jobs out files
+out_files/*.out
 
 # input parameters
 input_params/*
