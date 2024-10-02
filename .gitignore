@@ -11,3 +11,5 @@ out_files/*.out
 input_params/*
 
 # npy and txt files
+*.npy
+*.txt

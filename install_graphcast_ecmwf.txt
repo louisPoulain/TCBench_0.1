@@ -1,0 +1,8 @@
+gpu interactive session
+module load gcc python/3.10.12 (does not work with 3.9)
+python -m venv grap_venv/
+activate venv
+pip install -r req_graphcast.txt
+cd where ai-models-graphcast is located
+pip install -r requirements-gpu.txt -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+It should now work with ai-models --download-assets --assets ../graphcast/ --input cds --expver 0001 --date 20180110 --time 0000 --lead-time 24 --path '/scratch/lpoulain/graphcast/graphcast_test.grib' graphcast

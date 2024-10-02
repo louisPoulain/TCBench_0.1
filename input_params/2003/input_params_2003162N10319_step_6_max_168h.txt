@@ -1,0 +1,4 @@
+ArrayTaskID date     time lead time
+0           20030611 0000 18       
+1           20030611 0600 12       
+2           20030611 1200 6        
